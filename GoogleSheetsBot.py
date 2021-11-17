@@ -124,6 +124,7 @@ async def update_event():
         return
         
     valid_messages = 0
+    values_array = []
     
     for (message) in (reversed_messages_list):
         try:
@@ -191,38 +192,31 @@ async def update_event():
             
             print('\033[92m' + 'Found event start time: "' + event_start_timestamp + '"')
             print('\033[92m' + 'Found event end time: "' + event_end_timestamp + '"')
-        
-            update_range = google_worksheet_name + '!' + str(google_worksheet_start_row + valid_messages) + ':' + str(google_worksheet_start_row + valid_messages)
-        
-            value_range = {
-                "majorDimension": "COLUMNS",
-                'values': [[event_start_timestamp], [event_end_timestamp], [event_repeat], [event_creator], [discord_timestamp], [event_title], [event_description]]
-            }
-        
-            try:
-                response = spreadsheets.values().update(spreadsheetId=google_spreadsheet_id, range=update_range, valueInputOption="USER_ENTERED", body=value_range).execute()
-                print('\033[92m' + 'Finished updating worksheet')
-            except:
-                print('\033[91m' + 'Failed to update worksheet')
-                return
-                
+            
+            values_array.append([event_start_timestamp, event_end_timestamp, event_repeat, event_creator, discord_timestamp, event_title, event_description])
             valid_messages = valid_messages + 1
                     
-    print('\033[92m' + 'Number of rows with event data inserted: ' + str(valid_messages))
-    #print(f'\n{messages_array}')
+                    
+    update_range = google_worksheet_name + '!' + str(google_worksheet_start_row) + ':' + str(google_worksheet_start_row + google_worksheet_max_rows)
     
-    if (valid_messages < google_worksheet_max_rows):
-        value_range = {}
-        for (x) in range(valid_messages, google_worksheet_max_rows):
-            update_range = google_worksheet_name + '!' + str(google_worksheet_start_row + x) + ':' + str(google_worksheet_start_row + x)
+    value_range = {
+                "majorDimension": "ROWS",
+                'values': values_array
+            }
             
-            try:
-                response = spreadsheets.values().clear(spreadsheetId=google_spreadsheet_id, range=update_range, body=value_range).execute()
-                print('\033[92m' + 'Finished updating worksheet')
-            except:
-                print('\033[91m' + 'Failed to update worksheet')
+    if (valid_messages < google_worksheet_max_rows):
+        for (x) in range(valid_messages, google_worksheet_max_rows):
+            values_array.append(['', '', '', '', '', '', ''])
+        
+    try:
+        response = spreadsheets.values().update(spreadsheetId=google_spreadsheet_id, range=update_range, valueInputOption="USER_ENTERED", body=value_range).execute()
+        print('\033[92m' + 'Finished updating worksheet')
+    except Exception as e:
+        print('\033[91m' + 'Failed to update worksheet')
+        return
                 
-    print('\033[92m' + 'Number of rows with empty data inserted: ' + str(google_worksheet_max_rows - valid_messages))
+    print('\033[92m' + 'Number of rows with event data: ' + str(valid_messages))
+    print('\033[92m' + 'Number of rows with empty data: ' + str(google_worksheet_max_rows - valid_messages))
         
         
 sys.excepthook = handle_exception
