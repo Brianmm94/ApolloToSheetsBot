@@ -69,7 +69,7 @@ async def update_event():
     try:
         history = await channel.history(limit=int(discord_checked_messages)).flatten()
         print('\n')
-    except:
+    except Exception as e:
         print('\n')
         print('\033[91m' + 'Failed to find channel history')
         return
@@ -77,14 +77,14 @@ async def update_event():
     try:
         html_text = await chat_exporter.raw_export(channel, history, set_timezone='UTC')
         html_object = BeautifulSoup(html_text, features='html.parser')
-    except:
+    except Exception as e:
         print('\033[91m' + 'Failed to convert channel history into an object')
         return
     
     try:
         messages_list = html_object.find_all('div', class_='chatlog__messages')
         reversed_messages_list = list(reversed(messages_list))
-    except:
+    except Exception as e:
         print('\033[91m' + 'Failed to get messages list')
         return
         
@@ -101,7 +101,7 @@ async def update_event():
                 try:
                     creds.refresh(Request())
                     refreshed = True
-                except:
+                except Exception as e:
                     #Do nothing
                     pass
             if not (refreshed):
@@ -113,13 +113,13 @@ async def update_event():
             with open('token.json', 'w') as token:
                 print('\033[92m' + 'Writing new credentials to file')
                 token.write(creds.to_json())
-    except:
+    except Exception as e:
         print('\033[91m' + 'Failed to get credentials')
         return
 
     try:
         spreadsheets = build('sheets', 'v4', credentials=creds).spreadsheets()
-    except:
+    except Exception as e:
         print('\033[91m' + 'Failed to find spreadsheet')
         return
         
@@ -184,8 +184,8 @@ async def update_event():
                     ts = int(split_text[4])
                     event_end_timestamp = datetime.utcfromtimestamp(ts).isoformat()
                 else:
-                    event_end_timestamp = ''
-            except:
+                    event_end_timestamp = event_start_timestamp
+            except Exception as e:
                 print('\033[91m' + 'Failed to find event timestamps')
                 #print(f'\n{message}')
                 continue
