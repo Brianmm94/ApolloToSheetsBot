@@ -15,6 +15,12 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
+logging.basicConfig(filename='error.log',
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S',
+                    level=logging.DEBUG)
+
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(stream=sys.stdout)
 logger.addHandler(handler)
@@ -52,13 +58,12 @@ async def on_ready():
     
     try:
         channel = await client.fetch_channel(discord_channel_id)
-    except:
-        print('\033[91m' + f'Failed to find channel with ID {discord_channel_id}')
+    except Exception as e:
+        print('\033[91m' + f'Failed to find channel with ID {discord_channel_id}: ' + str(e))
         return
     else:
         print('\033[92m' + f'Found channel: "{channel.name}"')
         update_event.start()
-        
 
 # The function gets called to update the event data in the spreadsheet
 @tasks.loop(seconds=int(discord_check_frequency))
@@ -71,21 +76,21 @@ async def update_event():
         print('\n')
     except Exception as e:
         print('\n')
-        print('\033[91m' + 'Failed to find channel history')
+        print('\033[91m' + 'Failed to find channel history: ' + str(e))
         return
     
     try:
         html_text = await chat_exporter.raw_export(channel, history, set_timezone='UTC')
         html_object = BeautifulSoup(html_text, features='html.parser')
     except Exception as e:
-        print('\033[91m' + 'Failed to convert channel history into an object')
+        print('\033[91m' + 'Failed to convert channel history into an object: ' + str(e))
         return
     
     try:
         messages_list = html_object.find_all('div', class_='chatlog__messages')
         reversed_messages_list = list(reversed(messages_list))
     except Exception as e:
-        print('\033[91m' + 'Failed to get messages list')
+        print('\033[91m' + 'Failed to get messages list: ' + str(e))
         return
         
     try:
@@ -114,25 +119,30 @@ async def update_event():
                 print('\033[92m' + 'Writing new credentials to file')
                 token.write(creds.to_json())
     except Exception as e:
-        print('\033[91m' + 'Failed to get credentials')
+        print('\033[91m' + 'Failed to get credentials: ' + str(e))
         return
 
     try:
         spreadsheets = build('sheets', 'v4', credentials=creds).spreadsheets()
     except Exception as e:
-        print('\033[91m' + 'Failed to find spreadsheet')
+        print('\033[91m' + 'Failed to find spreadsheet: ' + str(e))
         return
         
     valid_messages = 0
     values_array = []
     
     for (message) in (reversed_messages_list):
+
+        #Exit the loop if enough valid messages have been found
+        if (valid_messages == google_worksheet_max_rows):
+            break
+
         try:
             event_title = message.find('span', class_='markdown').text
         except:
             continue
         else:
-            print('\033[92m' + 'Found event title: "' + event_title + '"')
+            print('\033[92m' + '\nFound event title: "' + event_title + '"')
     
             discord_timestamp_format = message.find('span', class_='chatlog__timestamp').text
             if not (discord_timestamp_format):
@@ -140,7 +150,7 @@ async def update_event():
                 #print(f'\n{message}')
                 continue
             else:
-                discord_timestamp = parser.parse(discord_timestamp_format).utcnow().replace(microsecond=0).isoformat()
+                discord_timestamp = parser.parse(discord_timestamp_format).replace(microsecond=0).isoformat()
                 print('\033[92m' + 'Found discord timestamp: "' + discord_timestamp + '"')
                 
             embed_description = message.find('div', class_='chatlog__embed-description')
@@ -178,15 +188,17 @@ async def update_event():
                 span_text = str(embed_field_list[1])
                 split_text = re.split('/>|</|>|<| - |br|t:|:f|:r|:t| ', span_text)
                 split_text = list(filter(None, split_text))
+                print(split_text)
                 ts = int(split_text[3])
                 event_start_timestamp = datetime.utcfromtimestamp(ts).isoformat()
                 if (split_text[4].isnumeric()):
                     ts = int(split_text[4])
+                    print(ts)
                     event_end_timestamp = datetime.utcfromtimestamp(ts).isoformat()
                 else:
                     event_end_timestamp = event_start_timestamp
             except Exception as e:
-                print('\033[91m' + 'Failed to find event timestamps')
+                print('\033[91m' + 'Failed to find event timestamps: ' + str(e))
                 #print(f'\n{message}')
                 continue
             
@@ -204,15 +216,16 @@ async def update_event():
                 'values': values_array
             }
             
+    #Add empty rows to the worksheet if there aren't enough valid messages
     if (valid_messages < google_worksheet_max_rows):
         for (x) in range(valid_messages, google_worksheet_max_rows):
             values_array.append(['', '', '', '', '', '', ''])
         
     try:
         response = spreadsheets.values().update(spreadsheetId=google_spreadsheet_id, range=update_range, valueInputOption="USER_ENTERED", body=value_range).execute()
-        print('\033[92m' + 'Finished updating worksheet')
+        print('\033[92m' + '\nFinished updating worksheet')
     except Exception as e:
-        print('\033[91m' + 'Failed to update worksheet')
+        print('\033[91m' + '\nFailed to update worksheet: ' + str(e))
         return
                 
     print('\033[92m' + 'Number of rows with event data: ' + str(valid_messages))
